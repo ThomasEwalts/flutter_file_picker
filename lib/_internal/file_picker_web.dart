@@ -1,7 +1,8 @@
 import 'dart:async';
-import 'dart:html';
+import 'dart:js_interop';
 import 'dart:typed_data';
 
+import 'package:web/web.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_web_plugins/flutter_web_plugins.dart';
 
@@ -23,12 +24,12 @@ class FilePickerWeb extends FilePicker {
 
   /// Initializes a DOM container where we can host input elements.
   Element _ensureInitialized(String id) {
-    Element? target = querySelector('#$id');
+    Element? target = document.querySelector('#$id');
     if (target == null) {
-      final Element targetElement = Element.tag('flt-file-picker-inputs')
-        ..id = id;
+      final Element targetElement =
+          document.createElement('flt-file-picker-inputs')..id = id;
 
-      querySelector('body')!.children.add(targetElement);
+      document.querySelector('body')!.children.add(targetElement);
       target = targetElement;
     }
     return target;
@@ -58,7 +59,7 @@ class FilePickerWeb extends FilePicker {
         Completer<List<PlatformFile>?>();
 
     String accept = _fileType(type, allowedExtensions);
-    InputElement uploadInput = FileUploadInputElement() as InputElement;
+    HTMLInputElement uploadInput = HTMLInputElement();
     uploadInput.draggable = true;
     uploadInput.multiple = allowMultiple;
     uploadInput.accept = accept;
@@ -76,7 +77,7 @@ class FilePickerWeb extends FilePicker {
       }
       changeEventTriggered = true;
 
-      final List<File> files = uploadInput.files!;
+      final FileList files = uploadInput.files!;
       final List<PlatformFile> pickedFiles = [];
 
       void addPickedFile(
@@ -101,7 +102,9 @@ class FilePickerWeb extends FilePicker {
         }
       }
 
-      for (File file in files) {
+      for (int index = 0; index < files.length; index++) {
+        final File file = files.item(index)!;
+
         if (withReadStream) {
           addPickedFile(file, null, null, _openFileReadStream(file));
           continue;
@@ -112,7 +115,7 @@ class FilePickerWeb extends FilePicker {
           reader.onLoadEnd.listen((e) {
             addPickedFile(file, null, reader.result as String?, null);
           });
-          reader.readAsDataUrl(file);
+          reader.readAsDataURL(file);
           continue;
         }
 
@@ -129,8 +132,9 @@ class FilePickerWeb extends FilePicker {
       }
     }
 
+    @JS('cancelledEventListener')
     void cancelledEventListener(_) {
-      window.removeEventListener('focus', cancelledEventListener);
+      window.removeEventListener('focus', cancelledEventListener as JSFunction);
 
       // This listener is called before the input changed event,
       // and the `uploadInput.files` value is still null
@@ -144,14 +148,14 @@ class FilePickerWeb extends FilePicker {
     }
 
     uploadInput.onChange.listen(changeEventListener);
-    uploadInput.addEventListener('change', changeEventListener);
-    uploadInput.addEventListener('cancel', cancelledEventListener);
+    uploadInput.addEventListener('change', changeEventListener as JSFunction);
+    uploadInput.addEventListener(
+        'cancel', cancelledEventListener as JSFunction);
 
     // Listen focus event for cancelled
-    window.addEventListener('focus', cancelledEventListener);
+    window.addEventListener('focus', cancelledEventListener as JSFunction);
 
     //Add input element to the page body
-    _target.children.clear();
     _target.children.add(uploadInput);
     uploadInput.click();
 
@@ -193,7 +197,7 @@ class FilePickerWeb extends FilePicker {
           : start + _readStreamChunkSize;
       final blob = file.slice(start, end);
       reader.readAsArrayBuffer(blob);
-      await reader.onLoad.first;
+      // Migrate call below from dart:html to p
       yield reader.result as List<int>;
       start += _readStreamChunkSize;
     }
